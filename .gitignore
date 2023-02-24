@@ -6,7 +6,7 @@ __pycache__/*.*
 build/*.*
 dist/*.*
 _tmp_*.*
-~_tmp_*.*
+~*.*
 _local_*.*
 mef.bat
 requirements.bat
