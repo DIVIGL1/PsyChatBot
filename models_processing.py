@@ -7,18 +7,19 @@ from sklearn.pipeline import Pipeline
 from tqdm import tqdm
 
 import text_processing
-import constants
+import common_vars
 
 # Удобнее загрузить таблицу в самом начале и потом обращаться к этой переменной
 df_q = pd.read_excel("questions.xlsx", index_col=None, engine='openpyxl')
 full_df = pd.read_excel("train_data.xlsx", index_col=None, engine='openpyxl')
 full_df = full_df[~full_df["answer"].isna()]
-constants.TEST_QUESTIONS = list(full_df["question"].unique())
+common_vars.TEST_QUESTIONS = list(full_df["question"].unique())
 
 models_quantity = 4
+forcibly_rebuild_models = False
 
 for model_num in range(1, models_quantity + 1):
-    if not os.path.isfile(f"model{model_num}.mdl"):
+    if not os.path.isfile(f"model{model_num}.mdl") or forcibly_rebuild_models:
         # Если не обнаружили файл хотя бы одной модели,
         # то это значит, что нужно обработать данные:
         full_df = full_df.rename(columns={"answer": "X"})
@@ -52,7 +53,7 @@ def get_data(num):
 
 def get_model(num):
     model_file_name = f"model{num}.mdl"
-    if os.path.isfile(model_file_name):
+    if os.path.isfile(model_file_name) and not forcibly_rebuild_models:
         # Если файл этой модели есть, то используем его:
         with open(model_file_name, 'rb') as hfile:
             model_branch = dill.load(hfile)
@@ -69,7 +70,8 @@ def get_model(num):
             text_clf = Pipeline([('tfidf', TfidfVectorizer()), ('clf', SGDClassifier(loss='hinge')), ])
             # Отфильтруем из общих данных только данные для этого вопроса:
             data = local_full_data[(local_full_data["question"] == one_question) & (local_full_data["y"] >= -1) & (local_full_data["y"] <= 1)]
-            # ...и учим только на них, но только если есть строки:
+
+            # ...и учим уже на этих данных, но только если есть строки:
             if data.shape[0] != 0:
                 text_clf.fit(data.X, data.y)
                 # и сохраняем эту подмодель со ссылкой на вопрос:
@@ -87,39 +89,39 @@ def prepare_models(quantity=models_quantity):
     for num in range(1, quantity + 1):
         models_group = models_group + [get_model(num)]
 
-    constants.PREPARED_MODELS = models_group
+    common_vars.PREPARED_MODELS = models_group
+
     print("Модели загружены.")
 
 
-def get_models_predictions(question_text, answer):
+def get_models_predictions(question_text=None, answer=None):
     # На оценку влияет "знак", его нужно получить и нужно учитывать:
-    print("-----------------------------")
-    print(question_text, answer)
     sign = df_q[df_q["question"] == question_text]["sign"].values[0]
     rating = 0
     ratings = []
-    for one_model in constants.PREPARED_MODELS:
+    answer = text_processing.preprocess_text(answer)
+
+    for one_model in common_vars.PREPARED_MODELS:
         one_rating = one_model[question_text].predict([answer])[0] * sign
         ratings = ratings + [one_rating]
         rating += one_rating
 
-    print("All ratings:", ratings)
     return ratings
+
+
+def get_models_predictions_and_print(question_text, answer):
+    rating = get_models_predictions(question_text=question_text, answer=answer)
+    print("------------------------------")
+    print(question_text, answer)
+    print("All ratings:", rating)
 
 
 if __name__ == '__main__':
     prepare_models()
+    q = "03. Больше всего я люблю, когда учитель..."
+    get_models_predictions_and_print(q, "кричать")
+    get_models_predictions_and_print(q, "мычать")
+    get_models_predictions_and_print(q, "выть")
+    get_models_predictions_and_print(q, "библиотекарь")
 
-    get_models_predictions("01. Я думаю, что хороший ученик – это тот, кто...", "старается хорошо учиться")
-    get_models_predictions("01. Я думаю, что хороший ученик – это тот, кто...", "плохо учится")
-    get_models_predictions("01. Я думаю, что хороший ученик – это тот, кто...", "на самом деле бамбук")
-    get_models_predictions("01. Я думаю, что хороший ученик – это тот, кто...", "хочет пытается быть самым умным")
-
-    get_models_predictions("01. Я думаю, что хороший ученик – это тот, кто...", "любит физику")
-    get_models_predictions("01. Я думаю, что хороший ученик – это тот, кто...", "любит математику")
-    get_models_predictions("01. Я думаю, что хороший ученик – это тот, кто...", "не любит литературу")
-
-    get_models_predictions(prepared_models, "01. Я думаю, что хороший ученик – это тот, кто...", "уважает всех учителей в школе")
-
-
-    # get_models_predictions(prepared_models, "02. Я думаю, что плохой ученик – это тот, кто...", "не учится")
+    get_models_predictions_and_print(q, "здесь интересно учиться")
