@@ -17,3 +17,5 @@ requirements.bat
 *.zip
 *.ttf
 *.mdl
+
+hidden_user_data.py
